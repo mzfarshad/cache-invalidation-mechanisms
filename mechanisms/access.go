@@ -1,4 +1,4 @@
-package cache
+package mechanisms
 
 import (
 	"container/list"
@@ -14,21 +14,21 @@ type CacheAccess interface {
 }
 
 type cacheAccess struct {
-	data      map[string]map[string]*entryCache
+	data      map[string]map[string]*entryCacheAccess
 	evication *list.List
 	mutex     sync.Mutex
 }
 
-type entryCache struct {
+type entryCacheAccess struct {
 	value    interface{}
 	category string
 	key      string
 	elem     *list.Element
 }
 
-func (c *cacheAccess) NewCacheAccess() CacheAccess {
+func NewCacheAccess() CacheAccess {
 	return &cacheAccess{
-		data:      make(map[string]map[string]*entryCache),
+		data:      make(map[string]map[string]*entryCacheAccess),
 		evication: list.New(),
 		mutex:     sync.Mutex{},
 	}
@@ -39,7 +39,7 @@ func (c *cacheAccess) Set(category, key string, val interface{}) {
 	defer c.mutex.Unlock()
 
 	if _, ok := c.data[category]; !ok {
-		c.data[category] = make(map[string]*entryCache)
+		c.data[category] = make(map[string]*entryCacheAccess)
 		log.Printf("added new category: %s in cacheAccess", category)
 	}
 	if entry, ok := c.data[category][key]; ok {
@@ -47,12 +47,12 @@ func (c *cacheAccess) Set(category, key string, val interface{}) {
 		c.evication.MoveToFront(entry.elem)
 		log.Printf("Updated [%s][%s] : %v", category, key, val)
 	} else {
-		elem := c.evication.PushFront(&entryCache{
+		elem := c.evication.PushFront(&entryCacheAccess{
 			value:    val,
 			key:      key,
 			category: category,
 		})
-		c.data[category][key] = &entryCache{
+		c.data[category][key] = &entryCacheAccess{
 			value: val,
 			elem:  elem,
 		}
@@ -65,8 +65,8 @@ func (c *cacheAccess) Get(category, key string) (interface{}, error) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if entryes, ok := c.data[category]; ok {
-		if entry, ok := entryes[key]; ok {
+	if entries, ok := c.data[category]; ok {
+		if entry, ok := entries[key]; ok {
 			c.evication.MoveToFront(entry.elem)
 			return entry.value, nil
 		} else {
@@ -80,8 +80,8 @@ func (c *cacheAccess) Delete(category, key string) {
 	c.mutex.Lock()
 	defer c.mutex.Unlock()
 
-	if entryes, ok := c.data[category]; ok {
-		if entry, ok := entryes[key]; ok {
+	if entries, ok := c.data[category]; ok {
+		if entry, ok := entries[key]; ok {
 			c.evication.Remove(entry.elem)
 			delete(c.data, entry.key)
 			log.Printf("Successfully deleted key : %s\n", key)
